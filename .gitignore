@@ -6,3 +6,4 @@
 .vscode/
 
 UserManagementAPI/api.pid
+UserManagementAPI/*.log
