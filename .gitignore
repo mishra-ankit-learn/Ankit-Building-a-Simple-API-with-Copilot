@@ -1,0 +1,6 @@
+# Build output folders
+**/bin/
+**/obj/
+
+# VS Code workspace settings
+.vscode/

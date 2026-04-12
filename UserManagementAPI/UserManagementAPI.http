@@ -1,0 +1,42 @@
+@UserManagementAPI_HostAddress = http://localhost:5088
+
+### Get all users
+GET {{UserManagementAPI_HostAddress}}/api/users
+Accept: application/json
+
+###
+
+### Get user by ID
+GET {{UserManagementAPI_HostAddress}}/api/users/1
+Accept: application/json
+
+###
+
+### Create user
+POST {{UserManagementAPI_HostAddress}}/api/users
+Content-Type: application/json
+
+{
+	"fullName": "Priya Nair",
+	"email": "priya.nair@techhive.local",
+	"department": "HR",
+	"isActive": true
+}
+
+###
+
+### Update user (replace 3 with created ID)
+PUT {{UserManagementAPI_HostAddress}}/api/users/3
+Content-Type: application/json
+
+{
+	"fullName": "Priya Nair",
+	"email": "priya.nair@techhive.local",
+	"department": "IT",
+	"isActive": false
+}
+
+###
+
+### Delete user (replace 3 with created ID)
+DELETE {{UserManagementAPI_HostAddress}}/api/users/3
