@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.ComponentModel.DataAnnotations;
 using System.Threading;
+using UserManagementAPI.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,14 +17,9 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-app.UseExceptionHandler(errorApp =>
-{
-    errorApp.Run(context =>
-    {
-        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-        return context.Response.WriteAsJsonAsync(new { message = "An unexpected server error occurred." });
-    });
-});
+app.UseMiddleware<ErrorHandlingMiddleware>();
+app.UseMiddleware<TokenAuthenticationMiddleware>();
+app.UseMiddleware<RequestResponseLoggingMiddleware>();
 
 app.UseHttpsRedirection();
 
@@ -44,194 +40,157 @@ var idCounter = usersById.Keys.DefaultIfEmpty(0).Max();
 
 var usersApi = app.MapGroup("/api/users").WithTags("Users");
 
-usersApi.MapGet("/", (string? department, bool? isActive, ILogger<Program> logger) =>
+usersApi.MapGet("/", (string? department, bool? isActive) =>
 {
-    try
+    IEnumerable<User> query = usersById.Values;
+
+    if (!string.IsNullOrWhiteSpace(department))
     {
-        IEnumerable<User> query = usersById.Values;
-
-        if (!string.IsNullOrWhiteSpace(department))
-        {
-            query = query.Where(u => u.Department.Equals(department.Trim(), StringComparison.OrdinalIgnoreCase));
-        }
-
-        if (isActive.HasValue)
-        {
-            query = query.Where(u => u.IsActive == isActive.Value);
-        }
-
-        var result = query
-            .OrderBy(u => u.Id)
-            .Select(UserResponse.FromUser)
-            .ToArray();
-
-        return Results.Ok(result);
+        query = query.Where(u => u.Department.Equals(department.Trim(), StringComparison.OrdinalIgnoreCase));
     }
-    catch (Exception ex)
+
+    if (isActive.HasValue)
     {
-        logger.LogError(ex, "Unexpected error while getting users.");
-        return Results.Problem("An unexpected error occurred while fetching users.", statusCode: StatusCodes.Status500InternalServerError);
+        query = query.Where(u => u.IsActive == isActive.Value);
     }
+
+    var result = query
+        .OrderBy(u => u.Id)
+        .Select(UserResponse.FromUser)
+        .ToArray();
+
+    return Results.Ok(result);
 })
     .WithName("GetAllUsers");
 
-usersApi.MapGet("/{id:int}", (int id, ILogger<Program> logger) =>
+usersApi.MapGet("/{id:int}", (int id) =>
 {
-    try
+    if (id <= 0)
     {
-        if (id <= 0)
-        {
-            return Results.BadRequest(new { message = "ID must be greater than zero." });
-        }
-
-        if (!usersById.TryGetValue(id, out var user))
-        {
-            return Results.NotFound(new { message = $"User with ID {id} was not found." });
-        }
-
-        return Results.Ok(UserResponse.FromUser(user));
+        return Results.BadRequest(new { message = "ID must be greater than zero." });
     }
-    catch (Exception ex)
+
+    if (!usersById.TryGetValue(id, out var user))
     {
-        logger.LogError(ex, "Unexpected error while getting user {UserId}.", id);
-        return Results.Problem("An unexpected error occurred while fetching the user.", statusCode: StatusCodes.Status500InternalServerError);
+        return Results.NotFound(new { message = $"User with ID {id} was not found." });
     }
+
+    return Results.Ok(UserResponse.FromUser(user));
 })
     .WithName("GetUserById");
 
-usersApi.MapPost("/", (CreateUserRequest request, ILogger<Program> logger) =>
+usersApi.MapPost("/", (CreateUserRequest request) =>
 {
-    try
+    var validationErrors = UserValidator.Validate(request.FullName, request.Email, request.Department);
+    if (validationErrors.Count > 0)
     {
-        var validationErrors = UserValidator.Validate(request.FullName, request.Email, request.Department);
-        if (validationErrors.Count > 0)
-        {
-            return Results.BadRequest(new { message = "Validation failed.", errors = validationErrors });
-        }
-
-        var normalizedEmail = NormalizeEmail(request.Email!);
-        if (emailToId.ContainsKey(normalizedEmail))
-        {
-            return Results.Conflict(new { message = "A user with this email already exists." });
-        }
-
-        var nextId = Interlocked.Increment(ref idCounter);
-        var user = new User
-        {
-            Id = nextId,
-            FullName = request.FullName!.Trim(),
-            Email = request.Email!.Trim(),
-            Department = request.Department!.Trim(),
-            IsActive = request.IsActive
-        };
-
-        if (!emailToId.TryAdd(normalizedEmail, user.Id))
-        {
-            return Results.Conflict(new { message = "A user with this email already exists." });
-        }
-
-        if (!usersById.TryAdd(user.Id, user))
-        {
-            emailToId.TryRemove(normalizedEmail, out _);
-            return Results.Problem("Unable to create user at this time.", statusCode: StatusCodes.Status500InternalServerError);
-        }
-
-        return Results.Created($"/api/users/{user.Id}", UserResponse.FromUser(user));
+        return Results.BadRequest(new { message = "Validation failed.", errors = validationErrors });
     }
-    catch (Exception ex)
+
+    var normalizedEmail = NormalizeEmail(request.Email!);
+    if (emailToId.ContainsKey(normalizedEmail))
     {
-        logger.LogError(ex, "Unexpected error while creating a user.");
-        return Results.Problem("An unexpected error occurred while creating the user.", statusCode: StatusCodes.Status500InternalServerError);
+        return Results.Conflict(new { message = "A user with this email already exists." });
     }
+
+    var nextId = Interlocked.Increment(ref idCounter);
+    var user = new User
+    {
+        Id = nextId,
+        FullName = request.FullName!.Trim(),
+        Email = request.Email!.Trim(),
+        Department = request.Department!.Trim(),
+        IsActive = request.IsActive
+    };
+
+    if (!emailToId.TryAdd(normalizedEmail, user.Id))
+    {
+        return Results.Conflict(new { message = "A user with this email already exists." });
+    }
+
+    if (!usersById.TryAdd(user.Id, user))
+    {
+        emailToId.TryRemove(normalizedEmail, out _);
+        return Results.Problem("Unable to create user at this time.", statusCode: StatusCodes.Status500InternalServerError);
+    }
+
+    return Results.Created($"/api/users/{user.Id}", UserResponse.FromUser(user));
 })
     .WithName("CreateUser");
 
-usersApi.MapPut("/{id:int}", (int id, UpdateUserRequest request, ILogger<Program> logger) =>
+usersApi.MapPut("/{id:int}", (int id, UpdateUserRequest request) =>
 {
-    try
+    if (id <= 0)
     {
-        if (id <= 0)
-        {
-            return Results.BadRequest(new { message = "ID must be greater than zero." });
-        }
-
-        var validationErrors = UserValidator.Validate(request.FullName, request.Email, request.Department);
-        if (validationErrors.Count > 0)
-        {
-            return Results.BadRequest(new { message = "Validation failed.", errors = validationErrors });
-        }
-
-        if (!usersById.TryGetValue(id, out var existingUser))
-        {
-            return Results.NotFound(new { message = $"User with ID {id} was not found." });
-        }
-
-        var oldNormalizedEmail = NormalizeEmail(existingUser.Email);
-        var newNormalizedEmail = NormalizeEmail(request.Email!);
-
-        if (!newNormalizedEmail.Equals(oldNormalizedEmail, StringComparison.OrdinalIgnoreCase))
-        {
-            if (emailToId.TryGetValue(newNormalizedEmail, out var ownerId) && ownerId != id)
-            {
-                return Results.Conflict(new { message = "A different user with this email already exists." });
-            }
-
-            if (!emailToId.TryAdd(newNormalizedEmail, id))
-            {
-                return Results.Conflict(new { message = "A different user with this email already exists." });
-            }
-        }
-
-        var updatedUser = new User
-        {
-            Id = id,
-            FullName = request.FullName!.Trim(),
-            Email = request.Email!.Trim(),
-            Department = request.Department!.Trim(),
-            IsActive = request.IsActive
-        };
-
-        usersById[id] = updatedUser;
-
-        if (!newNormalizedEmail.Equals(oldNormalizedEmail, StringComparison.OrdinalIgnoreCase))
-        {
-            emailToId.TryRemove(oldNormalizedEmail, out _);
-        }
-
-        return Results.Ok(UserResponse.FromUser(updatedUser));
+        return Results.BadRequest(new { message = "ID must be greater than zero." });
     }
-    catch (Exception ex)
+
+    var validationErrors = UserValidator.Validate(request.FullName, request.Email, request.Department);
+    if (validationErrors.Count > 0)
     {
-        logger.LogError(ex, "Unexpected error while updating user {UserId}.", id);
-        return Results.Problem("An unexpected error occurred while updating the user.", statusCode: StatusCodes.Status500InternalServerError);
+        return Results.BadRequest(new { message = "Validation failed.", errors = validationErrors });
     }
+
+    if (!usersById.TryGetValue(id, out var existingUser))
+    {
+        return Results.NotFound(new { message = $"User with ID {id} was not found." });
+    }
+
+    var oldNormalizedEmail = NormalizeEmail(existingUser.Email);
+    var newNormalizedEmail = NormalizeEmail(request.Email!);
+
+    if (!newNormalizedEmail.Equals(oldNormalizedEmail, StringComparison.OrdinalIgnoreCase))
+    {
+        if (emailToId.TryGetValue(newNormalizedEmail, out var ownerId) && ownerId != id)
+        {
+            return Results.Conflict(new { message = "A different user with this email already exists." });
+        }
+
+        if (!emailToId.TryAdd(newNormalizedEmail, id))
+        {
+            return Results.Conflict(new { message = "A different user with this email already exists." });
+        }
+    }
+
+    var updatedUser = new User
+    {
+        Id = id,
+        FullName = request.FullName!.Trim(),
+        Email = request.Email!.Trim(),
+        Department = request.Department!.Trim(),
+        IsActive = request.IsActive
+    };
+
+    usersById[id] = updatedUser;
+
+    if (!newNormalizedEmail.Equals(oldNormalizedEmail, StringComparison.OrdinalIgnoreCase))
+    {
+        emailToId.TryRemove(oldNormalizedEmail, out _);
+    }
+
+    return Results.Ok(UserResponse.FromUser(updatedUser));
 })
     .WithName("UpdateUser");
 
-usersApi.MapDelete("/{id:int}", (int id, ILogger<Program> logger) =>
+usersApi.MapDelete("/{id:int}", (int id) =>
 {
-    try
+    if (id <= 0)
     {
-        if (id <= 0)
-        {
-            return Results.BadRequest(new { message = "ID must be greater than zero." });
-        }
-
-        if (!usersById.TryRemove(id, out var removedUser))
-        {
-            return Results.NotFound(new { message = $"User with ID {id} was not found." });
-        }
-
-        emailToId.TryRemove(NormalizeEmail(removedUser.Email), out _);
-        return Results.NoContent();
+        return Results.BadRequest(new { message = "ID must be greater than zero." });
     }
-    catch (Exception ex)
+
+    if (!usersById.TryRemove(id, out var removedUser))
     {
-        logger.LogError(ex, "Unexpected error while deleting user {UserId}.", id);
-        return Results.Problem("An unexpected error occurred while deleting the user.", statusCode: StatusCodes.Status500InternalServerError);
+        return Results.NotFound(new { message = $"User with ID {id} was not found." });
     }
+
+    emailToId.TryRemove(NormalizeEmail(removedUser.Email), out _);
+    return Results.NoContent();
 })
     .WithName("DeleteUser");
+
+usersApi.MapGet("/trigger-error", (HttpContext _) => throw new InvalidOperationException("Intentional test exception."))
+    .WithName("TriggerError");
 
 app.Run();
 

@@ -92,3 +92,39 @@ The API was retested after fixes with focus on error paths:
 3. Helped craft consistent status-code behavior for edge conditions.
 4. Improved code resilience with middleware and endpoint-level exception handling patterns.
 5. Helped create expanded edge-case request scenarios for repeatable verification.
+
+## Middleware Phase (Security + Observability)
+
+### Middleware Added
+- Request/response logging middleware:
+	- Logs HTTP method, request path, and response status code (plus elapsed time).
+	- File: `Middleware/RequestResponseLoggingMiddleware.cs`.
+- Global error-handling middleware:
+	- Catches unhandled exceptions and returns consistent JSON error payload:
+		- `{ "error": "Internal server error." }`
+	- File: `Middleware/ErrorHandlingMiddleware.cs`.
+- Token authentication middleware:
+	- Validates bearer token from `Authorization` header.
+	- Returns `401 Unauthorized` for missing/invalid tokens.
+	- File: `Middleware/TokenAuthenticationMiddleware.cs`.
+
+### Middleware Pipeline Order
+Configured in `Program.cs` as requested:
+1. Error-handling middleware first.
+2. Authentication middleware next.
+3. Logging middleware last.
+
+### Middleware Testing Results
+Validated with HTTP requests after integration:
+- Valid token + normal endpoint returned `200`.
+- Missing token returned `401` with JSON error payload.
+- Invalid token returned `401` with JSON error payload.
+- Triggered exception endpoint returned `500` with standardized JSON error.
+- Logging output captured request method/path/status for audited calls.
+
+### Copilot Contribution in Middleware Phase
+1. Generated baseline middleware class structures quickly.
+2. Suggested clean middleware responsibilities (single-purpose classes).
+3. Helped sequence middleware registration for predictable behavior.
+4. Helped craft auth checks and standardized error responses.
+5. Helped produce middleware-focused test cases for validation.

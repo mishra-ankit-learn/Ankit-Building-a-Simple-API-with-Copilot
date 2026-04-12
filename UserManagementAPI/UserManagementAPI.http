@@ -1,20 +1,25 @@
 @UserManagementAPI_HostAddress = http://localhost:5088
+@ValidToken = techhive-dev-token
+@InvalidToken = bad-token
 
 ### Get all users
 GET {{UserManagementAPI_HostAddress}}/api/users
 Accept: application/json
+Authorization: Bearer {{ValidToken}}
 
 ###
 
 ### Get user by ID
 GET {{UserManagementAPI_HostAddress}}/api/users/1
 Accept: application/json
+Authorization: Bearer {{ValidToken}}
 
 ###
 
 ### Create user
 POST {{UserManagementAPI_HostAddress}}/api/users
 Content-Type: application/json
+Authorization: Bearer {{ValidToken}}
 
 {
 	"fullName": "Priya Nair",
@@ -28,6 +33,7 @@ Content-Type: application/json
 ### Update user (replace 3 with created ID)
 PUT {{UserManagementAPI_HostAddress}}/api/users/3
 Content-Type: application/json
+Authorization: Bearer {{ValidToken}}
 
 {
 	"fullName": "Priya Nair",
@@ -40,24 +46,28 @@ Content-Type: application/json
 
 ### Delete user (replace 3 with created ID)
 DELETE {{UserManagementAPI_HostAddress}}/api/users/3
+Authorization: Bearer {{ValidToken}}
 
 ###
 
 ### Get non-existent user
 GET {{UserManagementAPI_HostAddress}}/api/users/999
 Accept: application/json
+Authorization: Bearer {{ValidToken}}
 
 ###
 
 ### Get invalid ID user
 GET {{UserManagementAPI_HostAddress}}/api/users/0
 Accept: application/json
+Authorization: Bearer {{ValidToken}}
 
 ###
 
 ### Create user with invalid payload
 POST {{UserManagementAPI_HostAddress}}/api/users
 Content-Type: application/json
+Authorization: Bearer {{ValidToken}}
 
 {
 	"fullName": "",
@@ -71,6 +81,7 @@ Content-Type: application/json
 ### Create duplicate email user
 POST {{UserManagementAPI_HostAddress}}/api/users
 Content-Type: application/json
+Authorization: Bearer {{ValidToken}}
 
 {
 	"fullName": "Duplicate User",
@@ -84,6 +95,7 @@ Content-Type: application/json
 ### Update non-existent user
 PUT {{UserManagementAPI_HostAddress}}/api/users/999
 Content-Type: application/json
+Authorization: Bearer {{ValidToken}}
 
 {
 	"fullName": "Nobody",
@@ -97,6 +109,7 @@ Content-Type: application/json
 ### Update user with invalid email
 PUT {{UserManagementAPI_HostAddress}}/api/users/1
 Content-Type: application/json
+Authorization: Bearer {{ValidToken}}
 
 {
 	"fullName": "Anita Sharma",
@@ -109,3 +122,24 @@ Content-Type: application/json
 
 ### Delete non-existent user
 DELETE {{UserManagementAPI_HostAddress}}/api/users/999
+Authorization: Bearer {{ValidToken}}
+
+###
+
+### Unauthorized request (missing token)
+GET {{UserManagementAPI_HostAddress}}/api/users
+Accept: application/json
+
+###
+
+### Unauthorized request (invalid token)
+GET {{UserManagementAPI_HostAddress}}/api/users
+Accept: application/json
+Authorization: Bearer {{InvalidToken}}
+
+###
+
+### Trigger unhandled exception (should return standard error JSON)
+GET {{UserManagementAPI_HostAddress}}/api/users/trigger-error
+Accept: application/json
+Authorization: Bearer {{ValidToken}}
