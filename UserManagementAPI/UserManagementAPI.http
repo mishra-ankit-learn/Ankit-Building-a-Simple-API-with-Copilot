@@ -40,3 +40,72 @@ Content-Type: application/json
 
 ### Delete user (replace 3 with created ID)
 DELETE {{UserManagementAPI_HostAddress}}/api/users/3
+
+###
+
+### Get non-existent user
+GET {{UserManagementAPI_HostAddress}}/api/users/999
+Accept: application/json
+
+###
+
+### Get invalid ID user
+GET {{UserManagementAPI_HostAddress}}/api/users/0
+Accept: application/json
+
+###
+
+### Create user with invalid payload
+POST {{UserManagementAPI_HostAddress}}/api/users
+Content-Type: application/json
+
+{
+	"fullName": "",
+	"email": "invalid-email",
+	"department": "",
+	"isActive": true
+}
+
+###
+
+### Create duplicate email user
+POST {{UserManagementAPI_HostAddress}}/api/users
+Content-Type: application/json
+
+{
+	"fullName": "Duplicate User",
+	"email": "anita.sharma@techhive.local",
+	"department": "HR",
+	"isActive": true
+}
+
+###
+
+### Update non-existent user
+PUT {{UserManagementAPI_HostAddress}}/api/users/999
+Content-Type: application/json
+
+{
+	"fullName": "Nobody",
+	"email": "nobody@techhive.local",
+	"department": "IT",
+	"isActive": true
+}
+
+###
+
+### Update user with invalid email
+PUT {{UserManagementAPI_HostAddress}}/api/users/1
+Content-Type: application/json
+
+{
+	"fullName": "Anita Sharma",
+	"email": "not-an-email",
+	"department": "HR",
+	"isActive": true
+}
+
+###
+
+### Delete non-existent user
+DELETE {{UserManagementAPI_HostAddress}}/api/users/999

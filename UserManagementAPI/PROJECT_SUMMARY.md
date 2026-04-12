@@ -49,3 +49,46 @@ This implementation is ready for follow-up activities. You can extend it later b
 - Moving from in-memory storage to a database.
 - Adding authentication/authorization.
 - Adding integration tests and persistence-layer unit tests.
+
+## Debugging Phase (Bug Fixes)
+
+### Bugs Identified
+- Input validation gaps: Empty values and malformed emails were not consistently rejected.
+- Non-existent lookup behavior: ID edge cases needed clearer handling (`id <= 0` and unknown IDs).
+- Unhandled exception risk: Endpoints lacked structured exception handling and fallback behavior.
+- Performance/scale concerns: Repeated list scans (`FirstOrDefault`, `Any`) could degrade with larger datasets.
+
+### Fixes Implemented with Copilot Assistance
+- Added stronger request validation logic:
+	- Required `FullName`, `Email`, and `Department`.
+	- Added minimum length check for names.
+	- Added email format validation using `EmailAddressAttribute`.
+- Added robust error handling:
+	- Configured global exception handling middleware (`UseExceptionHandler`).
+	- Added endpoint-level `try/catch` blocks with structured logging and `Problem` responses.
+- Improved lookup/update performance and reliability:
+	- Replaced list-backed store with `ConcurrentDictionary<int, User>` for fast ID lookup.
+	- Added email index (`ConcurrentDictionary<string, int>`) for efficient duplicate checks.
+	- Added deterministic ID generation with `Interlocked.Increment`.
+- Added richer filtering support for GET users:
+	- Optional query parameters: `department` and `isActive`.
+
+### Validation and Edge-Case Testing
+The API was retested after fixes with focus on error paths:
+- `GET /api/users` returned `200`.
+- `GET /api/users/999` returned `404`.
+- `GET /api/users/0` returned `400`.
+- Invalid `POST` payload returned `400` with validation errors.
+- Valid `POST` returned `201`.
+- Duplicate email `POST` returned `409`.
+- `PUT` on missing user returned `404`.
+- `PUT` with invalid email returned `400`.
+- `DELETE` missing user returned `404`.
+- Valid `DELETE` returned `204`.
+
+### How Copilot Helped in Debugging
+1. Assisted in identifying likely fault patterns (validation gaps, lookup edge cases, and exception paths).
+2. Accelerated refactoring suggestions for safer in-memory data structures and indexing.
+3. Helped craft consistent status-code behavior for edge conditions.
+4. Improved code resilience with middleware and endpoint-level exception handling patterns.
+5. Helped create expanded edge-case request scenarios for repeatable verification.
