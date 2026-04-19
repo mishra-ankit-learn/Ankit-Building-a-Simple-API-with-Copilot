@@ -11,14 +11,24 @@ public sealed class RequestResponseLoggingMiddleware(RequestDelegate next, ILogg
     {
         var timer = Stopwatch.StartNew();
 
-        await _next(context);
+        try
+        {
+            await _next(context);
+        }
+        finally
+        {
+            timer.Stop();
+            var statusCode = context.Response.StatusCode;
+            var logLevel = statusCode >= 500 ? LogLevel.Error
+                         : statusCode >= 400 ? LogLevel.Warning
+                         : LogLevel.Information;
 
-        timer.Stop();
-        _logger.LogInformation(
-            "HTTP {Method} {Path} responded {StatusCode} in {ElapsedMs}ms",
-            context.Request.Method,
-            context.Request.Path,
-            context.Response.StatusCode,
-            timer.ElapsedMilliseconds);
+            _logger.Log(logLevel,
+                "HTTP {Method} {Path} responded {StatusCode} in {ElapsedMs}ms",
+                context.Request.Method,
+                context.Request.Path,
+                statusCode,
+                timer.ElapsedMilliseconds);
+        }
     }
 }
