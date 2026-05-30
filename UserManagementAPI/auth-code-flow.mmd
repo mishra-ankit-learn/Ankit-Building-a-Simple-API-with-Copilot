@@ -1,0 +1,87 @@
+flowchart TD
+    A[Client Request] --> B{Path starts with /api?}
+
+    B -- No --> P1[Skip token auth]
+    P1 --> P2[RequestResponseLoggingMiddleware starts timer]
+    P2 --> P3[Execute public endpoint or static response]
+    P3 --> P4[Log method path status elapsed]
+    P4 --> Z[Return response]
+
+    B -- Yes --> C[TokenAuthenticationMiddleware]
+    C --> D[Read Auth:ApiToken from config]
+    D --> E{Token configured?}
+    E -- No --> E1[Fallback to techhive-dev-token and log warning]
+    E -- Yes --> F[Continue]
+    E1 --> F
+
+    F --> G{Authorization header present?}
+    G -- No --> U1[401 Unauthorized JSON]
+    U1 --> Z
+
+    G -- Yes --> H{Header starts with Bearer ?}
+    H -- No --> U2[401 Unauthorized JSON]
+    U2 --> Z
+
+    H -- Yes --> I[Extract incoming token]
+    I --> J{Token equals configured token?}
+    J -- No --> U3[401 Unauthorized JSON]
+    U3 --> Z
+
+    J -- Yes --> K[RequestResponseLoggingMiddleware starts timer]
+    K --> L[Route execution in /api/users]
+
+    L --> M{Endpoint selected}
+
+    M --> M1[GET /api/users]
+    M --> M2[GET /api/users/id]
+    M --> M3[POST /api/users]
+    M --> M4[PUT /api/users/id]
+    M --> M5[DELETE /api/users/id]
+    M --> M6[GET /api/users/trigger-error]
+
+    M1 --> R1[Filter by department and isActive then return 200]
+    M2 --> R2{Id valid and exists?}
+    R2 -- No --> R2a[400 or 404]
+    R2 -- Yes --> R2b[200 UserResponse]
+
+    M3 --> R3[Validate fullName email department]
+    R3 --> R3a{Validation errors?}
+    R3a -- Yes --> R3b[400 Validation failed]
+    R3a -- No --> R3c{Email already exists?}
+    R3c -- Yes --> R3d[409 Conflict]
+    R3c -- No --> R3e[Generate Id add user return 201]
+
+    M4 --> R4[Validate request and load existing user]
+    R4 --> R4a{Any validation or lookup issue?}
+    R4a -- Yes --> R4b[400 or 404]
+    R4a -- No --> R4c{New email owned by another user?}
+    R4c -- Yes --> R4d[409 Conflict]
+    R4c -- No --> R4e[Update user and email index return 200]
+
+    M5 --> R5{Id valid and user exists?}
+    R5 -- No --> R5a[400 or 404]
+    R5 -- Yes --> R5b[Remove user and email index return 204]
+
+    M6 --> R6[Throw InvalidOperationException]
+
+    R1 --> N
+    R2a --> N
+    R2b --> N
+    R3b --> N
+    R3d --> N
+    R3e --> N
+    R4b --> N
+    R4d --> N
+    R4e --> N
+    R5a --> N
+    R5b --> N
+    R6 --> X
+
+    L -. exception .-> X[ErrorHandlingMiddleware catch]
+
+    X --> X1{Response already started?}
+    X1 -- Yes --> X2[Rethrow]
+    X1 -- No --> X3[Clear response write 500 JSON]
+    X3 --> N
+
+    N[RequestResponseLoggingMiddleware logs final status] --> Z
